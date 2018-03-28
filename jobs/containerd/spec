@@ -7,4 +7,5 @@ packages:
 
 templates:
   bin/containerd_ctl.erb: bin/containerd_ctl
+  bin/gdnctr: bin/gdnctr
   config/config.toml.erb: config/containerd.toml

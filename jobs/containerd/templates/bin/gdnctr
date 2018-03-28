@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+alias gdnctr='/var/vcap/packages/containerd/bin/ctr --a /var/vcap/sys/run/containerd/containerd.sock -n garden'
