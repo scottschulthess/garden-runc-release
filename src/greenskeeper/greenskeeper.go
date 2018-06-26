@@ -2,6 +2,7 @@ package greenskeeper
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -9,6 +10,60 @@ import (
 )
 
 const defaultDirectoryMode = os.FileMode(0701)
+
+type File struct {
+	Source string
+	Dest   string
+	UID    int
+	GID    int
+	Remove bool
+}
+
+func CopyFiles(files []File) error {
+	for _, file := range files {
+		tmpDest := fmt.Sprintf("%s.tmp", file.Dest)
+		fileInfo, err := os.Stat(file.Source)
+		if err != nil {
+			return err
+		}
+
+		src, err := os.Open(file.Source)
+		if err != nil {
+			return nil
+		}
+		defer src.Close()
+
+		dst, err := os.Create(tmpDest)
+		if err != nil {
+			return nil
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, src); err != nil {
+			return err
+		}
+
+		if err := os.Chmod(tmpDest, fileInfo.Mode()); err != nil {
+			return err
+		}
+
+		if file.GID > -1 {
+			if err := os.Chown(tmpDest, file.UID, file.GID); err != nil {
+				return err
+			}
+		}
+
+		if err := os.RemoveAll(file.Dest); err != nil {
+			return err
+		}
+
+		if err := os.Rename(tmpDest, file.Dest); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 type Directory struct {
 	Path string

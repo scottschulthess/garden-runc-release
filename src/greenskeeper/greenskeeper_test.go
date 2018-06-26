@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strconv"
 	"syscall"
 
@@ -76,6 +77,119 @@ var _ = Describe("Greenskeeper", func() {
 		})
 	})
 
+	Describe("#CopyFiles", func() {
+		var (
+			sourceDir      string
+			destDir        string
+			origKittenFile string
+			newKittenFile  string
+			files          []File
+
+			copyErr error
+		)
+
+		BeforeEach(func() {
+			var err error
+			sourceDir, err = ioutil.TempDir("", "source")
+			Expect(err).NotTo(HaveOccurred())
+			destDir, err = ioutil.TempDir("", "dest")
+			Expect(err).NotTo(HaveOccurred())
+
+			origKittenFile = filepath.Join(sourceDir, "kitten")
+			newKittenFile = filepath.Join(destDir, "kitten")
+
+			err = ioutil.WriteFile(origKittenFile, []byte("i am very fluffy"), 0640)
+			Expect(err).NotTo(HaveOccurred())
+
+			files = []File{File{
+				Source: origKittenFile,
+				Dest:   newKittenFile,
+				UID:    1001,
+				GID:    1002,
+			}}
+		})
+
+		JustBeforeEach(func() {
+			copyErr = CopyFiles(files)
+		})
+
+		AfterEach(func() {
+			Expect(os.RemoveAll(sourceDir)).To(Succeed())
+			Expect(os.RemoveAll(destDir)).To(Succeed())
+		})
+
+		It("does not fail", func() {
+			Expect(copyErr).NotTo(HaveOccurred())
+		})
+
+		Context("when it copies the file", func() {
+			var kittenFileInfo os.FileInfo
+
+			JustBeforeEach(func() {
+				kittenFileInfo = stat(newKittenFile)
+			})
+
+			It("'places' (writes) it in the correct destination", func() {
+				Expect(newKittenFile).To(BeAnExistingFile())
+			})
+
+			It("maintains the correct permissions", func() {
+				Expect(kittenFileInfo.Mode().Perm()).To(Equal(os.FileMode(0640)))
+			})
+
+			It("sets the correct user ownership", func() {
+				Expect(kittenFileInfo.Sys().(*syscall.Stat_t).Uid).To(Equal(uint32(1001)))
+			})
+
+			It("sets the correct group ownership", func() {
+				Expect(kittenFileInfo.Sys().(*syscall.Stat_t).Gid).To(Equal(uint32(1002)))
+			})
+
+			It("has the correct file contents", func() {
+				origKittenFileContents, err := ioutil.ReadFile(origKittenFile)
+				Expect(err).NotTo(HaveOccurred())
+
+				newKittenFileContents, err := ioutil.ReadFile(newKittenFile)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(string(newKittenFileContents)).To(Equal(string(origKittenFileContents)))
+			})
+
+			Context("when the file already exists at the destination", func() {
+				BeforeEach(func() {
+					Expect(CopyFiles(files)).To(Succeed())
+				})
+
+				It("does not fail", func() {
+					Expect(copyErr).NotTo(HaveOccurred())
+				})
+
+				Context("and that file is a running executable", func() {
+					BeforeEach(func() {
+						var err error
+						sleepyCmd := exec.Command(sleepyBin)
+						_, err = gexec.Start(sleepyCmd, GinkgoWriter, GinkgoWriter)
+						Expect(err).NotTo(HaveOccurred())
+
+						dst, err := filepath.Abs(sleepyBin)
+						Expect(err).NotTo(HaveOccurred())
+						files = []File{File{
+							Source: sleepyBin2,
+							Dest:   dst,
+							UID:    1001,
+							GID:    1002,
+							Remove: true,
+						}}
+					})
+
+					It("does not fail", func() {
+						Expect(copyErr).NotTo(HaveOccurred())
+					})
+				})
+			})
+		})
+	})
+
 	Describe("#SetupDirectories", func() {
 		var (
 			dir         string
@@ -101,7 +215,7 @@ var _ = Describe("Greenskeeper", func() {
 			Expect(os.RemoveAll(dir)).To(Succeed())
 		})
 
-		It("does not return an error", func() {
+		It("does not fail", func() {
 			Expect(setupErr).NotTo(HaveOccurred())
 		})
 
